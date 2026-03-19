@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:afpflutter/services/authentication.dart';
+import 'package:afpflutter/services/record_service.dart';
 import 'package:afpflutter/screens/authentication/login.dart';
 import 'package:afpflutter/screens/qr/qr_scanner_page.dart'; // QR scanner screen
+import 'package:afpflutter/screens/customer/customer_record_details_page.dart';
 
 /// Landing screen design: header (profile + welcome + logout), SCAN QR, QR with L-brackets, IN/OUT buttons.
 class _DashboardColors {
@@ -10,10 +12,44 @@ class _DashboardColors {
   static const Color outButtonRed = Color(0xFFE53935);
 }
 
-class Dashboard extends StatelessWidget {
+class Dashboard extends StatefulWidget {
   const Dashboard({super.key});
 
+  @override
+  State<Dashboard> createState() => _DashboardState();
+}
+
+class _DashboardState extends State<Dashboard> {
+  final AuthenticationService _authService = AuthenticationService(); // Handles profile lookup
+  final RecordService _recordService = RecordService(); // Handles scan -> record creation
+  String _displayName = 'User'; // Default fallback name
+  bool _isProcessingScan = false; // Prevent duplicate scan submissions
+
+  @override
+  void initState() {
+    super.initState();
+    _loadDisplayName(); // Fetch logged-in user name
+  }
+
+  Future<void> _loadDisplayName() async {
+    try {
+      final profile = await _authService.getProfile(); // Uses authenticated profile endpoint
+      final firstName = (profile['first_name'] ?? '').toString().trim();
+      final lastName = (profile['last_name'] ?? '').toString().trim();
+      final fullName = [firstName, lastName]
+          .where((part) => part.isNotEmpty)
+          .join(' ');
+      if (!mounted || fullName.isEmpty) return;
+      setState(() {
+        _displayName = fullName; // Show API profile name in header
+      });
+    } catch (_) {
+      // Keep fallback value if profile fetch fails.
+    }
+  }
+
   Future<void> _scanForAction(BuildContext context, {required String actionLabel}) async {
+    if (_isProcessingScan) return;
     final accentColor = (actionLabel == 'IN') // Determine corner color
         ? _DashboardColors.inButtonGreen // IN -> green corners
         : _DashboardColors.outButtonRed; // OUT -> red corners
@@ -30,14 +66,40 @@ class Dashboard extends StatelessWidget {
     if (!context.mounted) return; // Ensure context is still valid
     if (scannedValue == null) return; // User backed out / no scan
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('$actionLabel scanned: $scannedValue')), // Temporary feedback
-    );
+    setState(() {
+      _isProcessingScan = true;
+    });
+    try {
+      final response = await _recordService.createRecordFromScan(
+        customerId: scannedValue.trim(), // QR value is customer_id
+        type: actionLabel, // IN or OUT
+      );
+      if (!mounted) return;
+      final customer = response['customer'] as Map<String, dynamic>? ?? {};
+      final record = response['record'] as Map<String, dynamic>? ?? {};
+      await Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (context) => CustomerRecordDetailsPage(
+            customer: customer,
+            record: record,
+          ),
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Scan failed: $e')),
+      );
+    } finally {
+      if (!mounted) return;
+      setState(() {
+        _isProcessingScan = false;
+      });
+    }
   }
 
   Future<void> _handleLogout(BuildContext context) async {
-    final authService = AuthenticationService();
-    await authService.clearToken();
+    await _authService.clearToken();
     if (context.mounted) {
       Navigator.pushAndRemoveUntil(
         context,
@@ -109,7 +171,7 @@ class Dashboard extends StatelessWidget {
                               ),
                               const SizedBox(height: 2),
                               Text(
-                                'James Andrews',
+                                _displayName,
                                 style: TextStyle(
                                   fontSize: 18,
                                   fontWeight: FontWeight.bold,
@@ -124,7 +186,7 @@ class Dashboard extends StatelessWidget {
                   ),
                   IconButton(
                     icon: const Icon(Icons.logout),
-                    onPressed: () => _handleLogout(context),
+                    onPressed: _isProcessingScan ? null : () => _handleLogout(context),
                     tooltip: 'Logout',
                   ),
                 ],
@@ -167,7 +229,9 @@ class Dashboard extends StatelessWidget {
                                 label: 'IN',
                                 filled: true,
                                 color: _DashboardColors.inButtonGreen,
-                                onPressed: () => _scanForAction(context, actionLabel: 'IN'), // Open QR scanner
+                                onPressed: _isProcessingScan
+                                    ? null
+                                    : () => _scanForAction(context, actionLabel: 'IN'), // Open QR scanner
                               ),
                             ),
                             const SizedBox(width: 16),
@@ -176,13 +240,20 @@ class Dashboard extends StatelessWidget {
                                 label: 'OUT',
                                 filled: false,
                                 color: _DashboardColors.outButtonRed,
-                                onPressed: () => _scanForAction(context, actionLabel: 'OUT'), // Open QR scanner
+                                onPressed: _isProcessingScan
+                                    ? null
+                                    : () => _scanForAction(context, actionLabel: 'OUT'), // Open QR scanner
                               ),
                             ),
                           ],
                         ),
                       ),
                     ),
+                    if (_isProcessingScan)
+                      const Padding(
+                        padding: EdgeInsets.only(top: 14),
+                        child: Center(child: CircularProgressIndicator()),
+                      ),
                     SizedBox(height: screenHeight * 0.05),
                   ],
                 ),
@@ -207,7 +278,7 @@ class _ScanActionButton extends StatelessWidget {
   final String label;
   final bool filled;
   final Color color;
-  final VoidCallback onPressed;
+  final VoidCallback? onPressed;
 
   @override
   Widget build(BuildContext context) {
