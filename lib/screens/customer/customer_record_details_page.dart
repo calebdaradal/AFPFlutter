@@ -18,7 +18,7 @@ class CustomerRecordDetailsPage extends StatelessWidget {
     return text.isEmpty ? fallback : text;
   }
 
-  /// Builds ordered unique URLs from `image` plus optional second field (`image_id` / `imageId` from API/Mongo).
+  /// Builds ordered unique URLs: vehicle images plus optional `imagePerson` from Mongo/API.
   List<String> _collectImageUrls() {
     final out = <String>[];
     void add(dynamic raw) {
@@ -28,6 +28,8 @@ class CustomerRecordDetailsPage extends StatelessWidget {
     add(customer['image']);
     add(customer['image_id']);
     add(customer['imageId']);
+    add(customer['image_person']);
+    add(customer['imagePerson']);
     return out;
   }
 
