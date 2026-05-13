@@ -47,5 +47,7 @@
 	<true/>
 	<key>NSCameraUsageDescription</key>
 	<string>Camera access is required to scan QR codes for IN/OUT.</string> <!-- Needed for QR scanning -->
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Photo library access lets you set your profile picture.</string>
 </dict>
 </plist>

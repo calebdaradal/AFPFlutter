@@ -1,5 +1,9 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:afpflutter/services/authentication.dart';
+import 'package:afpflutter/shared/profile_avatar_image.dart';
+import 'package:image_picker/image_picker.dart';
 
 class ProfileSettingsPage extends StatefulWidget {
   const ProfileSettingsPage({super.key});
@@ -28,6 +32,8 @@ class _ProfileSettingsPageState extends State<ProfileSettingsPage> {
   bool _isEditingPhone = false; // tells us if phone number is currently editable
   bool _isLoadingProfile = true; // true while initial profile data is loading
   bool _isSaving = false; // true while saving profile changes
+  bool _isUploadingImage = false; // true while uploading a new profile photo
+  String _profileImageRef = ''; // Mongo `image`: URL, data URI, or empty for default asset
 
   @override
   void initState() {
@@ -53,6 +59,7 @@ class _ProfileSettingsPageState extends State<ProfileSettingsPage> {
         _fullNameController.text = fullName;
         _emailController.text = (profile['email'] ?? '').toString();
         _phoneController.text = (profile['phone_number'] ?? '').toString();
+        _profileImageRef = (profile['image'] ?? '').toString().trim();
         _isLoadingProfile = false;
       });
     } catch (e) {
@@ -84,6 +91,7 @@ class _ProfileSettingsPageState extends State<ProfileSettingsPage> {
         firstName: firstName, // PUT /user/profile first name
         lastName: lastName, // PUT /user/profile last name
         phoneNumber: phone, // PUT /user/profile phone
+        image: _profileImageRef, // Keep current photo when editing name/phone
       );
       final combinedName = [firstName, lastName].join(' ');
       if (!mounted) return;
@@ -104,6 +112,59 @@ class _ProfileSettingsPageState extends State<ProfileSettingsPage> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Failed to update profile: $e')),
       );
+    }
+  }
+
+  /// Pick an image from the gallery, compress, store as data URI in Mongo via PUT /user/profile.
+  Future<void> _pickAndUploadProfileImage() async {
+    if (_isSaving || _isUploadingImage) return;
+    final picker = ImagePicker();
+    final file = await picker.pickImage(
+      source: ImageSource.gallery,
+      maxWidth: 1024,
+      maxHeight: 1024,
+      imageQuality: 82,
+    );
+    if (file == null || !mounted) return;
+    setState(() {
+      _isUploadingImage = true;
+    });
+    try {
+      final bytes = await file.readAsBytes();
+      if (bytes.length > 2 * 1024 * 1024) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Image too large. Try another photo.')),
+          );
+        }
+        return;
+      }
+      final dataUri = 'data:image/jpeg;base64,${base64Encode(bytes)}';
+      await _authService.updateProfile(
+        firstName: _firstNameController.text.trim(),
+        lastName: _lastNameController.text.trim(),
+        phoneNumber: _phoneController.text.trim(),
+        image: dataUri,
+      );
+      if (!mounted) return;
+      setState(() {
+        _profileImageRef = dataUri;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Profile photo updated')),
+      );
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Could not update photo: $e')),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isUploadingImage = false;
+        });
+      }
     }
   }
 
@@ -150,10 +211,9 @@ class _ProfileSettingsPageState extends State<ProfileSettingsPage> {
                   children: [
                     // Circular profile image
                     ClipOval(
-                      child: Image.asset(
-                        'depositphotos_745925384-stock-photo-businessman-portrait-outdoor-smiling-mature.webp',
-                        width: 120,
-                        height: 120,
+                      child: ProfileAvatarImage(
+                        imageRef: _profileImageRef,
+                        size: 120,
                         fit: BoxFit.cover,
                       ),
                     ),
@@ -164,9 +224,7 @@ class _ProfileSettingsPageState extends State<ProfileSettingsPage> {
                       right: 0,
                       child: Center(
                         child: GestureDetector(
-                          onTap: () {
-                            // TODO: pick/change profile photo
-                          },
+                          onTap: _isUploadingImage ? null : _pickAndUploadProfileImage,
                           child: Container(
                             padding: const EdgeInsets.symmetric(
                               horizontal: 10,

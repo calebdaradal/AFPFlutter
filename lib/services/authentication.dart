@@ -197,6 +197,7 @@ class AuthenticationService {
     required String firstName,
     required String lastName,
     required String phoneNumber,
+    String image = '',
   }) async {
     final url = Uri.parse('$baseUrl/user/profile');
     final headers = await _buildAuthHeaders();
@@ -207,6 +208,7 @@ class AuthenticationService {
         'first_name': firstName,
         'last_name': lastName,
         'phone_number': phoneNumber,
+        'image': image,
       }),
     );
     final data = jsonDecode(response.body) as Map<String, dynamic>;

@@ -4,6 +4,7 @@ import 'package:afpflutter/services/record_service.dart';
 import 'package:afpflutter/screens/authentication/login.dart';
 import 'package:afpflutter/screens/qr/qr_scanner_page.dart'; // QR scanner screen
 import 'package:afpflutter/screens/customer/customer_record_details_page.dart';
+import 'package:afpflutter/shared/profile_avatar_image.dart';
 
 /// Landing screen design: header (profile + welcome + logout), SCAN QR, QR with L-brackets, IN/OUT buttons.
 class _DashboardColors {
@@ -23,15 +24,16 @@ class _DashboardState extends State<Dashboard> {
   final AuthenticationService _authService = AuthenticationService(); // Handles profile lookup
   final RecordService _recordService = RecordService(); // Handles scan -> record creation
   String _displayName = 'User'; // Default fallback name
+  String _profileImageRef = ''; // API `image` field — empty uses default asset in [ProfileAvatarImage]
   bool _isProcessingScan = false; // Prevent duplicate scan submissions
 
   @override
   void initState() {
     super.initState();
-    _loadDisplayName(); // Fetch logged-in user name
+    _loadProfileHeader(); // Fetch logged-in user name and profile photo
   }
 
-  Future<void> _loadDisplayName() async {
+  Future<void> _loadProfileHeader() async {
     try {
       final profile = await _authService.getProfile(); // Uses authenticated profile endpoint
       final firstName = (profile['first_name'] ?? '').toString().trim();
@@ -39,12 +41,14 @@ class _DashboardState extends State<Dashboard> {
       final fullName = [firstName, lastName]
           .where((part) => part.isNotEmpty)
           .join(' ');
-      if (!mounted || fullName.isEmpty) return;
+      final image = (profile['image'] ?? '').toString().trim();
+      if (!mounted) return;
       setState(() {
-        _displayName = fullName; // Show API profile name in header
+        _displayName = fullName.isEmpty ? _displayName : fullName;
+        _profileImageRef = image; // Same string shown on profile settings and here
       });
     } catch (_) {
-      // Keep fallback value if profile fetch fails.
+      // Keep fallbacks if profile fetch fails.
     }
   }
 
@@ -137,24 +141,18 @@ class _DashboardState extends State<Dashboard> {
                   // Entire profile section (avatar + text) is tappable
                   Expanded(
                     child: GestureDetector(
-                      onTap: () {
-                        Navigator.pushNamed(context, '/profile-settings');
+                      onTap: () async {
+                        await Navigator.pushNamed(context, '/profile-settings');
+                        if (mounted) await _loadProfileHeader();
                       },
                       behavior: HitTestBehavior.opaque,
                       child: Row(
                         children: [
                           ClipOval(
-                            child: Image.asset(
-                              'depositphotos_745925384-stock-photo-businessman-portrait-outdoor-smiling-mature.webp',
-                              width: 52,
-                              height: 52,
+                            child: ProfileAvatarImage(
+                              imageRef: _profileImageRef,
+                              size: 52,
                               fit: BoxFit.cover,
-                              errorBuilder: (_, __, ___) => Container(
-                                width: 52,
-                                height: 52,
-                                color: Colors.grey.shade300,
-                                child: const Icon(Icons.person, size: 28),
-                              ),
                             ),
                           ),
                           const SizedBox(width: 12),

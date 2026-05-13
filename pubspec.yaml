@@ -39,6 +39,7 @@ dependencies:
   jwt_decoder: ^2.0.1
   shared_preferences: ^2.2.2
   mobile_scanner: ^7.0.1 # QR scanner (camera-based)
+  image_picker: ^1.2.2
 
 dev_dependencies:
   flutter_test:
