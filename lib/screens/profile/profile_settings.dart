@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:afpflutter/services/authentication.dart';
+import 'package:afpflutter/screens/authentication/login.dart';
 import 'package:afpflutter/services/api_config.dart';
 import 'package:afpflutter/shared/profile_avatar_image.dart';
 import 'package:image_picker/image_picker.dart';
@@ -66,6 +67,17 @@ class _ProfileSettingsPageState extends State<ProfileSettingsPage> {
         _otpEnabled = profile['otp_enabled'] == true;
         _isLoadingProfile = false;
       });
+    } on OtpReverificationRequired catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _isLoadingProfile = false;
+      });
+      Navigator.of(context).pushAndRemoveUntil(
+        MaterialPageRoute(
+          builder: (_) => LoginPage(sessionExpiredMessage: e.message),
+        ),
+        (route) => false,
+      );
     } catch (e) {
       if (!mounted) return;
       setState(() {
@@ -108,6 +120,17 @@ class _ProfileSettingsPageState extends State<ProfileSettingsPage> {
       });
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Profile updated successfully')),
+      );
+    } on OtpReverificationRequired catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _isSaving = false;
+      });
+      Navigator.of(context).pushAndRemoveUntil(
+        MaterialPageRoute(
+          builder: (_) => LoginPage(sessionExpiredMessage: e.message),
+        ),
+        (route) => false,
       );
     } catch (e) {
       if (!mounted) return;

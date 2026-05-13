@@ -1,11 +1,11 @@
 {
-    "name": "afpflutter",
-    "short_name": "afpflutter",
+    "name": "AFP Scan",
+    "short_name": "AFP Scan",
     "start_url": ".",
     "display": "standalone",
     "background_color": "#0175C2",
     "theme_color": "#0175C2",
-    "description": "A new Flutter project.",
+    "description": "AFP Scan mobile and web client.",
     "orientation": "portrait-primary",
     "prefer_related_applications": false,
     "icons": [

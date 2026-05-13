@@ -32,6 +32,7 @@ class RecordService {
     );
 
     final data = jsonDecode(response.body) as Map<String, dynamic>;
+    await _authService.throwIfOtpReverifyResponse(response, data);
     if (response.statusCode == 200) {
       return data;
     }

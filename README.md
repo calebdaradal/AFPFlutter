@@ -1,6 +1,6 @@
-# afpflutter
+# AFP Scan
 
-A new Flutter project.
+Flutter client for AFP (package name `afpflutter` in `pubspec.yaml`).
 
 ## Getting Started
 

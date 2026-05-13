@@ -116,9 +116,22 @@ class _DashboardState extends State<Dashboard> {
         _displayName = fullName.isEmpty ? _displayName : fullName;
         _profileImageRef = image; // Same string shown on profile settings and here
       });
+    } on OtpReverificationRequired catch (e) {
+      if (!mounted) return;
+      _goToLoginAfterOtpPolicy(e.message);
     } catch (_) {
       // Keep fallbacks if profile fetch fails.
     }
+  }
+
+  /// Session cleared server-side: show login with explanation (7-day OTP policy).
+  void _goToLoginAfterOtpPolicy(String message) {
+    Navigator.of(context).pushAndRemoveUntil(
+      MaterialPageRoute(
+        builder: (_) => LoginPage(sessionExpiredMessage: message),
+      ),
+      (route) => false,
+    );
   }
 
   Future<void> _scanForAction(BuildContext context, {required String actionLabel}) async {
@@ -158,6 +171,9 @@ class _DashboardState extends State<Dashboard> {
           ),
         ),
       );
+    } on OtpReverificationRequired catch (e) {
+      if (!mounted) return;
+      _goToLoginAfterOtpPolicy(e.message);
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(

@@ -12,7 +12,10 @@ class _LoginColors {
 }
 
 class LoginPage extends StatefulWidget {
-  const LoginPage({super.key});
+  const LoginPage({super.key, this.sessionExpiredMessage});
+
+  /// Shown after the server forces re-login (e.g. 7-day authenticator policy).
+  final String? sessionExpiredMessage;
 
   @override
   State<LoginPage> createState() => _LoginPageState();
@@ -24,6 +27,18 @@ class _LoginPageState extends State<LoginPage> {
   final _authService = AuthenticationService();
   bool _isLoading = false;
   bool _obscurePassword = true;
+
+  @override
+  void initState() {
+    super.initState();
+    final msg = widget.sessionExpiredMessage;
+    if (msg != null && msg.isNotEmpty) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
+      });
+    }
+  }
 
   Future<void> _handleLogin() async {
     setState(() => _isLoading = true);

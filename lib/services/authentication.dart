@@ -3,6 +3,14 @@ import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'api_config.dart';
 
+/// Thrown when the server ends the session because OTP must be re-entered (7-day policy).
+class OtpReverificationRequired implements Exception {
+  OtpReverificationRequired([this.message = 'Please sign in again and enter your authenticator code.']);
+  final String message;
+  @override
+  String toString() => message;
+}
+
 class AuthenticationService {
   static String get baseUrl =>
       ApiConfig.baseUrl; // use current backend chosen in ApiConfig
@@ -168,6 +176,21 @@ class AuthenticationService {
     await prefs.remove(_tokenKey);
   }
 
+  /// Clears JWT and throws [OtpReverificationRequired] when the API signals 7-day OTP re-verify.
+  Future<void> throwIfOtpReverifyResponse(
+    http.Response response,
+    Map<String, dynamic> data,
+  ) async {
+    if (response.statusCode != 401) return;
+    final detail = data['detail'];
+    if (detail is Map && detail['code'] == 'OTP_REVERIFY_REQUIRED') {
+      await clearToken();
+      final msg = detail['message'] as String? ??
+          'Authenticator must be re-verified at least every 7 days. Please log in again.';
+      throw OtpReverificationRequired(msg);
+    }
+  }
+
   Future<Map<String, String>> _buildAuthHeaders() async {
     final token = await getToken();
     if (token == null || token.isEmpty) {
@@ -185,6 +208,7 @@ class AuthenticationService {
     final headers = await _buildAuthHeaders();
     final response = await http.get(url, headers: headers);
     final data = jsonDecode(response.body) as Map<String, dynamic>;
+    await throwIfOtpReverifyResponse(response, data);
     if (response.statusCode == 200) {
       return data;
     }
@@ -217,6 +241,7 @@ class AuthenticationService {
       body: jsonEncode(body),
     );
     final data = jsonDecode(response.body) as Map<String, dynamic>;
+    await throwIfOtpReverifyResponse(response, data);
     if (response.statusCode == 200) {
       return data;
     }
@@ -234,6 +259,7 @@ class AuthenticationService {
       body: jsonEncode({'accepted': accepted}),
     );
     final data = jsonDecode(response.body) as Map<String, dynamic>;
+    await throwIfOtpReverifyResponse(response, data);
     if (response.statusCode == 200) {
       return data;
     }
