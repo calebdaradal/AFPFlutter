@@ -22,7 +22,7 @@ class AuthenticationService {
           'Content-Type': 'application/json', // Tell server we're sending JSON
         },
         body: jsonEncode({
-          'email': email,
+          'email': email.trim(),
           'password': password,
         }),
       );
@@ -95,8 +95,8 @@ class AuthenticationService {
           'Content-Type': 'application/json', // Tell server we're sending JSON
         },
         body: jsonEncode({
-          'email': email,
-          'otp_code': otpCode,
+          'email': email.trim(),
+          'otp_code': otpCode.trim(),
         }),
       );
 

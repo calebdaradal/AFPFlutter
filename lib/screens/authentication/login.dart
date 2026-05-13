@@ -37,7 +37,7 @@ class _LoginPageState extends State<LoginPage> {
           context,
           MaterialPageRoute(
             builder: (context) => OTPVerificationPage(
-              email: _emailController.text,
+              email: _emailController.text.trim(),
             ),
           ),
         );
