@@ -4,9 +4,8 @@ import 'package:afpflutter/services/authentication.dart';
 import 'package:afpflutter/screens/authentication/otp_verification.dart';
 import 'package:flutter/material.dart';
 
-/// Design colors: placeholder grey, field grey, primary blue (1:1 with provided UI).
+/// Design colors: field grey, primary blue (1:1 with provided UI).
 class _LoginColors {
-  static const Color logoPlaceholder = Color(0xFFE0E0E0);
   static const Color fieldFill = Color(0xFFF0F0F0);
   static const Color primaryBlue = Color(0xFF3F3FFF);
 }
@@ -65,7 +64,7 @@ class _LoginPageState extends State<LoginPage> {
     final padding = EdgeInsets.symmetric(horizontal: horizontalPadding);
     // Constrain content width on tablets for readability
     final maxContentWidth = (screenWidth * 0.85).clamp(320.0, 440.0);
-    // Logo placeholder: scale with screen height, keep aspect
+    // AFP seal asset: scale with screen height, keep aspect
     final logoSize = (screenHeight * 0.22).clamp(120.0, 200.0);
 
     return Scaffold(
@@ -86,14 +85,25 @@ class _LoginPageState extends State<LoginPage> {
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
                       SizedBox(height: screenHeight * 0.06),
-                      // Logo placeholder: large grey box
+                      // AFP seal (bundled asset)
                       Center(
-                        child: Container(
-                          width: logoSize,
-                          height: logoSize,
-                          decoration: BoxDecoration(
-                            color: _LoginColors.logoPlaceholder,
-                            borderRadius: BorderRadius.circular(16),
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(16),
+                          child: Image.asset(
+                            'assets/ejlUhEok.jpg',
+                            width: logoSize,
+                            height: logoSize,
+                            fit: BoxFit.contain,
+                            errorBuilder: (_, __, ___) => Container(
+                              width: logoSize,
+                              height: logoSize,
+                              alignment: Alignment.center,
+                              decoration: BoxDecoration(
+                                color: Colors.grey.shade300,
+                                borderRadius: BorderRadius.circular(16),
+                              ),
+                              child: const Icon(Icons.image_not_supported, size: 48),
+                            ),
                           ),
                         ),
                       ),
