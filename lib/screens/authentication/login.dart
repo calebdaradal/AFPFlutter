@@ -2,6 +2,7 @@ import 'package:afpflutter/shared/custom_button.dart';
 import 'package:afpflutter/shared/custom_text_field.dart';
 import 'package:afpflutter/services/authentication.dart';
 import 'package:afpflutter/screens/authentication/otp_verification.dart';
+import 'package:afpflutter/screens/dashboard/dashboard.dart';
 import 'package:flutter/material.dart';
 
 /// Design colors: field grey, primary blue (1:1 with provided UI).
@@ -26,22 +27,30 @@ class _LoginPageState extends State<LoginPage> {
 
   Future<void> _handleLogin() async {
     setState(() => _isLoading = true);
+    final emailTrim = _emailController.text.trim();
     try {
-      await _authService.login(
-        _emailController.text,
+      final res = await _authService.login(
+        emailTrim,
         _passwordController.text,
       );
-      if (mounted) {
-        // Password accepted: OTP is always required before the app receives a JWT
+      if (!mounted) return;
+      if (res['requires_otp'] == true) {
         Navigator.push(
           context,
           MaterialPageRoute(
-            builder: (context) => OTPVerificationPage(
-              email: _emailController.text.trim(),
-            ),
+            builder: (context) => OTPVerificationPage(email: emailTrim),
           ),
         );
+        return;
       }
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(
+          builder: (context) => Dashboard(
+            showOtpSetupPromptAfterLogin: res['show_otp_setup_prompt'] == true,
+          ),
+        ),
+      );
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(

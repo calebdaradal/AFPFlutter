@@ -2,8 +2,10 @@ import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:afpflutter/services/authentication.dart';
+import 'package:afpflutter/services/api_config.dart';
 import 'package:afpflutter/shared/profile_avatar_image.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 class ProfileSettingsPage extends StatefulWidget {
   const ProfileSettingsPage({super.key});
@@ -34,6 +36,7 @@ class _ProfileSettingsPageState extends State<ProfileSettingsPage> {
   bool _isSaving = false; // true while saving profile changes
   bool _isUploadingImage = false; // true while uploading a new profile photo
   String _profileImageRef = ''; // Mongo `image`: URL, data URI, or empty for default asset
+  bool _otpEnabled = false; // Extra login protection when risk_engine marks session risky
 
   @override
   void initState() {
@@ -60,6 +63,7 @@ class _ProfileSettingsPageState extends State<ProfileSettingsPage> {
         _emailController.text = (profile['email'] ?? '').toString();
         _phoneController.text = (profile['phone_number'] ?? '').toString();
         _profileImageRef = (profile['image'] ?? '').toString().trim();
+        _otpEnabled = profile['otp_enabled'] == true;
         _isLoadingProfile = false;
       });
     } catch (e) {
@@ -92,6 +96,7 @@ class _ProfileSettingsPageState extends State<ProfileSettingsPage> {
         lastName: lastName, // PUT /user/profile last name
         phoneNumber: phone, // PUT /user/profile phone
         image: _profileImageRef, // Keep current photo when editing name/phone
+        otpEnabled: _otpEnabled, // Keep 2FA preference in sync
       );
       final combinedName = [firstName, lastName].join(' ');
       if (!mounted) return;
@@ -145,6 +150,7 @@ class _ProfileSettingsPageState extends State<ProfileSettingsPage> {
         lastName: _lastNameController.text.trim(),
         phoneNumber: _phoneController.text.trim(),
         image: dataUri,
+        otpEnabled: _otpEnabled,
       );
       if (!mounted) return;
       setState(() {
@@ -164,6 +170,51 @@ class _ProfileSettingsPageState extends State<ProfileSettingsPage> {
         setState(() {
           _isUploadingImage = false;
         });
+      }
+    }
+  }
+
+  /// Opens the API QR page so the user can scan the TOTP secret (public GET).
+  Future<void> _openTotpSetupInBrowser() async {
+    final email = _emailController.text.trim();
+    if (email.isEmpty) return;
+    final uri = Uri.parse(
+      '${ApiConfig.baseUrl}/user/setup-totp/${Uri.encodeComponent(email)}',
+    );
+    if (await canLaunchUrl(uri)) {
+      await launchUrl(uri, mode: LaunchMode.externalApplication);
+    }
+  }
+
+  /// Profile switch: turn optional authenticator protection on or off.
+  Future<void> _onOtpToggled(bool value) async {
+    if (_isSaving || _isLoadingProfile) return;
+    final prev = _otpEnabled;
+    setState(() {
+      _otpEnabled = value;
+    });
+    try {
+      await _authService.updateProfile(
+        firstName: _firstNameController.text.trim(),
+        lastName: _lastNameController.text.trim(),
+        phoneNumber: _phoneController.text.trim(),
+        image: _profileImageRef,
+        otpEnabled: value,
+      );
+      if (value && mounted) {
+        await _openTotpSetupInBrowser();
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Scan the QR code in the browser to finish setup.')),
+          );
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _otpEnabled = prev);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Could not update 2FA: $e')),
+        );
       }
     }
   }
@@ -273,6 +324,22 @@ class _ProfileSettingsPageState extends State<ProfileSettingsPage> {
                 style: TextStyle(
                   fontSize: 12,
                   color: Colors.grey,
+                ),
+              ),
+              const SizedBox(height: 16),
+              Container(
+                width: double.infinity,
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                child: SwitchListTile(
+                  title: const Text('Authenticator (OTP)'),
+                  subtitle: const Text(
+                    'When on, suspicious logins require a code from your authenticator app.',
+                  ),
+                  value: _otpEnabled,
+                  onChanged: _onOtpToggled,
                 ),
               ),
               const SizedBox(height: 24),

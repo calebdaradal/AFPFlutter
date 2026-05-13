@@ -198,24 +198,46 @@ class AuthenticationService {
     required String lastName,
     required String phoneNumber,
     String image = '',
+    bool? otpEnabled,
   }) async {
     final url = Uri.parse('$baseUrl/user/profile');
     final headers = await _buildAuthHeaders();
+    final body = <String, dynamic>{
+      'first_name': firstName,
+      'last_name': lastName,
+      'phone_number': phoneNumber,
+      'image': image,
+    };
+    if (otpEnabled != null) {
+      body['otp_enabled'] = otpEnabled;
+    }
     final response = await http.put(
       url,
       headers: headers,
-      body: jsonEncode({
-        'first_name': firstName,
-        'last_name': lastName,
-        'phone_number': phoneNumber,
-        'image': image,
-      }),
+      body: jsonEncode(body),
     );
     final data = jsonDecode(response.body) as Map<String, dynamic>;
     if (response.statusCode == 200) {
       return data;
     }
     final errorMsg = data['detail'] ?? data['message'] ?? 'Failed to update profile';
+    throw Exception(errorMsg);
+  }
+
+  /// Optional OTP enrollment after login (Yes / No thanks on modal).
+  Future<Map<String, dynamic>> submitOtpSetupPromptAccepted(bool accepted) async {
+    final url = Uri.parse('$baseUrl/user/otp-setup-response');
+    final headers = await _buildAuthHeaders();
+    final response = await http.post(
+      url,
+      headers: headers,
+      body: jsonEncode({'accepted': accepted}),
+    );
+    final data = jsonDecode(response.body) as Map<String, dynamic>;
+    if (response.statusCode == 200) {
+      return data;
+    }
+    final errorMsg = data['detail'] ?? data['message'] ?? 'Request failed';
     throw Exception(errorMsg);
   }
 }

@@ -5,6 +5,8 @@ import 'package:afpflutter/screens/authentication/login.dart';
 import 'package:afpflutter/screens/qr/qr_scanner_page.dart'; // QR scanner screen
 import 'package:afpflutter/screens/customer/customer_record_details_page.dart';
 import 'package:afpflutter/shared/profile_avatar_image.dart';
+import 'package:afpflutter/services/api_config.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 /// Landing screen design: header (profile + welcome + logout), SCAN QR, QR with L-brackets, IN/OUT buttons.
 class _DashboardColors {
@@ -14,7 +16,13 @@ class _DashboardColors {
 }
 
 class Dashboard extends StatefulWidget {
-  const Dashboard({super.key});
+  const Dashboard({
+    super.key,
+    this.showOtpSetupPromptAfterLogin = false,
+  });
+
+  /// After password login: show one-time optional OTP enrollment modal.
+  final bool showOtpSetupPromptAfterLogin;
 
   @override
   State<Dashboard> createState() => _DashboardState();
@@ -31,6 +39,67 @@ class _DashboardState extends State<Dashboard> {
   void initState() {
     super.initState();
     _loadProfileHeader(); // Fetch logged-in user name and profile photo
+    if (widget.showOtpSetupPromptAfterLogin) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => _showOptionalOtpSetupDialog());
+    }
+  }
+
+  /// Modal: Yes enables OTP + opens TOTP QR URL; No thanks snoozes until next periodic nudge.
+  Future<void> _showOptionalOtpSetupDialog() async {
+    if (!mounted) return;
+    await showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) {
+        return AlertDialog(
+          title: const Text('Add authenticator protection?'),
+          content: const Text(
+            'You can use an authenticator app for extra verification when we detect a risky login (new IP, repeated failures). '
+            'You can also change this anytime in Profile.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () async {
+                Navigator.of(ctx).pop();
+                try {
+                  await _authService.submitOtpSetupPromptAccepted(false);
+                } catch (_) {}
+              },
+              child: const Text('No thanks'),
+            ),
+            FilledButton(
+              onPressed: () async {
+                Navigator.of(ctx).pop();
+                try {
+                  final res = await _authService.submitOtpSetupPromptAccepted(true);
+                  final path = res['setup_totp_path'] as String?;
+                  if (path != null && path.isNotEmpty && mounted) {
+                    final uri = Uri.parse('${ApiConfig.baseUrl}/$path');
+                    if (await canLaunchUrl(uri)) {
+                      await launchUrl(uri, mode: LaunchMode.externalApplication);
+                    }
+                  }
+                  if (mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text('Scan the QR in your browser to finish authenticator setup.'),
+                      ),
+                    );
+                  }
+                } catch (e) {
+                  if (mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text('Could not enable OTP: $e')),
+                    );
+                  }
+                }
+              },
+              child: const Text('Yes'),
+            ),
+          ],
+        );
+      },
+    );
   }
 
   Future<void> _loadProfileHeader() async {
