@@ -40,7 +40,7 @@ class AuthenticationService {
         throw Exception('Invalid JSON response: ${response.body}');
       }
 
-      // Handle 200 - Direct login success (no OTP needed)
+      // Handle 200 — may include a token only when the endpoint issues one (e.g. not used after password-only login).
       if (response.statusCode == 200) {
         // Store JWT token if present
         if (responseData['token'] != null) {
@@ -48,7 +48,7 @@ class AuthenticationService {
         }
         return responseData;
       }
-      // Handle 202 - Requires OTP verification (risky login detected)
+      // Handle 202 - Legacy/alternate "OTP required" HTTP status (no token stored here).
       else if (response.statusCode == 202) {
         return responseData;
       }

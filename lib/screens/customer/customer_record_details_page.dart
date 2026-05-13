@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+/// After a QR scan, shows customer details with a swipeable image carousel at the top.
 class CustomerRecordDetailsPage extends StatelessWidget {
   const CustomerRecordDetailsPage({
     super.key,
@@ -17,9 +18,22 @@ class CustomerRecordDetailsPage extends StatelessWidget {
     return text.isEmpty ? fallback : text;
   }
 
+  /// Builds ordered unique URLs from `image` plus optional second field (`image_id` / `imageId` from API/Mongo).
+  List<String> _collectImageUrls() {
+    final out = <String>[];
+    void add(dynamic raw) {
+      final s = raw?.toString().trim() ?? '';
+      if (s.isNotEmpty && !out.contains(s)) out.add(s);
+    }
+    add(customer['image']);
+    add(customer['image_id']);
+    add(customer['imageId']);
+    return out;
+  }
+
   @override
   Widget build(BuildContext context) {
-    final imageUrl = _asString('image', fallback: '');
+    final imageUrls = _collectImageUrls();
     final fullName = '${_asString('first_name')} ${_asString('last_name')}';
 
     return Scaffold(
@@ -39,21 +53,7 @@ class CustomerRecordDetailsPage extends StatelessWidget {
                   right: 0,
                   top: 0,
                   height: topHalfHeight,
-                  child: imageUrl.isEmpty
-                      ? Container(
-                          color: Colors.grey.shade300,
-                          alignment: Alignment.center,
-                          child: const Icon(Icons.image_not_supported, size: 48),
-                        )
-                      : Image.network(
-                          imageUrl,
-                          fit: BoxFit.cover,
-                          errorBuilder: (_, __, ___) => Container(
-                            color: Colors.grey.shade300,
-                            alignment: Alignment.center,
-                            child: const Icon(Icons.broken_image, size: 48),
-                          ),
-                        ),
+                  child: _CustomerImageCarousel(imageUrls: imageUrls),
                 ),
                 DraggableScrollableSheet(
                   initialChildSize: 0.5,
@@ -128,6 +128,96 @@ class CustomerRecordDetailsPage extends StatelessWidget {
           },
         ),
       ),
+    );
+  }
+}
+
+/// Swipeable full-width images with dot indicators when more than one URL is present.
+class _CustomerImageCarousel extends StatefulWidget {
+  const _CustomerImageCarousel({required this.imageUrls});
+
+  final List<String> imageUrls;
+
+  @override
+  State<_CustomerImageCarousel> createState() => _CustomerImageCarouselState();
+}
+
+class _CustomerImageCarouselState extends State<_CustomerImageCarousel> {
+  late final PageController _pageController;
+  int _currentPage = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _pageController = PageController();
+  }
+
+  @override
+  void dispose() {
+    _pageController.dispose();
+    super.dispose();
+  }
+
+  Widget _pageContent(int index) {
+    final urls = widget.imageUrls;
+    if (urls.isEmpty) {
+      return Container(
+        color: Colors.grey.shade300,
+        alignment: Alignment.center,
+        child: const Icon(Icons.image_not_supported, size: 48),
+      );
+    }
+    final url = urls[index];
+    return Image.network(
+      url,
+      fit: BoxFit.cover,
+      width: double.infinity,
+      height: double.infinity,
+      errorBuilder: (_, __, ___) => Container(
+        color: Colors.grey.shade300,
+        alignment: Alignment.center,
+        child: const Icon(Icons.broken_image, size: 48),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final urls = widget.imageUrls;
+    final pageCount = urls.isEmpty ? 1 : urls.length;
+
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        PageView.builder(
+          controller: _pageController,
+          itemCount: pageCount,
+          onPageChanged: (i) => setState(() => _currentPage = i),
+          itemBuilder: (context, index) => _pageContent(index),
+        ),
+        if (urls.length > 1)
+          Positioned(
+            left: 0,
+            right: 0,
+            bottom: 12,
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: List.generate(urls.length, (i) {
+                final active = i == _currentPage;
+                return AnimatedContainer(
+                  duration: const Duration(milliseconds: 200),
+                  margin: const EdgeInsets.symmetric(horizontal: 4),
+                  width: active ? 22 : 8,
+                  height: 8,
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(4),
+                    color: active ? Colors.white : Colors.white54,
+                  ),
+                );
+              }),
+            ),
+          ),
+      ],
     );
   }
 }

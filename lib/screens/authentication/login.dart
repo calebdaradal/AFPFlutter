@@ -28,23 +28,20 @@ class _LoginPageState extends State<LoginPage> {
   Future<void> _handleLogin() async {
     setState(() => _isLoading = true);
     try {
-      final response = await _authService.login(
+      await _authService.login(
         _emailController.text,
         _passwordController.text,
       );
       if (mounted) {
-        if (response['requires_otp'] == true) {
-          Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (context) => OTPVerificationPage(
-                email: _emailController.text,
-              ),
+        // Password accepted: OTP is always required before the app receives a JWT
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => OTPVerificationPage(
+              email: _emailController.text,
             ),
-          );
-        } else {
-          Navigator.pushReplacementNamed(context, '/dashboard');
-        }
+          ),
+        );
       }
     } catch (e) {
       if (mounted) {
