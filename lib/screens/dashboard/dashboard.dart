@@ -35,6 +35,16 @@ class _DashboardState extends State<Dashboard> {
   String _profileImageRef = ''; // API `image` field — empty uses default asset in [ProfileAvatarImage]
   bool _isProcessingScan = false; // Prevent duplicate scan submissions
 
+  String _normalizePasscardIdFromQr(String raw) { // added: normalize QR payload into a passcard id
+    final value = raw.trim(); // added: trim whitespace
+    if (value.isEmpty) return ''; // added: empty guard
+    final lower = value.toLowerCase(); // added: case-insensitive prefix match
+    if (lower.startsWith('vpccode:')) { // changed: new QR format: vpccode:{raw passcard id}
+      return value.substring(8).trim(); // changed: strip "vpccode:" and trim the remainder
+    } // changed: end vpccode: handling
+    return value; // added: backward-compatible fallback (raw id)
+  } // added: end normalizer
+
   @override
   void initState() {
     super.initState();
@@ -134,6 +144,25 @@ class _DashboardState extends State<Dashboard> {
     );
   }
 
+  Future<void> _showCenteredErrorModal(String message) async { // added: show a centered modal dialog for scan errors (e.g., invalid passcard)
+    if (!mounted) return; // added: ensure widget is still mounted before showing dialog
+    await showDialog<void>( // added: show a blocking dialog
+      context: context, // added: use current context
+      builder: (ctx) { // added: dialog builder
+        return AlertDialog( // added: material modal centered on screen
+          title: const Text('Error'), // added: dialog title
+          content: Text(message), // added: dialog body message
+          actions: [ // added: action buttons
+            TextButton( // added: dismiss button
+              onPressed: () => Navigator.of(ctx).pop(), // added: close dialog
+              child: const Text('OK'), // added: button label
+            ), // added: end button
+          ], // added: end actions
+        ); // added: end dialog
+      }, // added: end builder
+    ); // added: end showDialog
+  } // added: end helper
+
   Future<void> _scanForAction(BuildContext context, {required String actionLabel}) async {
     if (_isProcessingScan) return;
     final accentColor = (actionLabel == 'IN') // Determine corner color
@@ -156,19 +185,40 @@ class _DashboardState extends State<Dashboard> {
       _isProcessingScan = true;
     });
     try {
+      final passcardId = _normalizePasscardIdFromQr(scannedValue); // added: parse vpc:{id} QR payload into raw passcard id
       final response = await _recordService.createRecordFromScan(
-        customerId: scannedValue.trim(), // QR value is customer_id
-        type: actionLabel, // IN or OUT
+        passcardId: passcardId, // changed: send normalized raw passcard id to backend
+        type: actionLabel, // unchanged: IN or OUT
       );
       if (!mounted) return;
-      final customer = response['customer'] as Map<String, dynamic>? ?? {};
+      final owner = response['owner'] as Map<String, dynamic>? ?? {}; // changed: owner details from new backend
+      final passcard = response['passcard'] as Map<String, dynamic>? ?? {}; // added: passcard details for owner section labels
+      Map<String, dynamic> vehicle = response['vehicle'] as Map<String, dynamic>? ?? {}; // changed: single vehicle tied to passcard
+      final passcardStatus = response['passcard_status']?.toString() ?? ''; // added: passcard status to display at top of modal
+      if (vehicle.isEmpty) { // added: backwards-compat in case API still returns `vehicles` list from older builds
+        final vehicles = response['vehicles'] as List<dynamic>? ?? []; // added: read legacy vehicles list key
+        if (vehicles.isNotEmpty && vehicles.first is Map) { // added: ensure first element is a map
+          vehicle = Map<String, dynamic>.from(vehicles.first as Map); // added: use the first vehicle as the single vehicle
+        } // added: end legacy fallback
+      } // added: end vehicle fallback
+      final imageProxyPath = vehicle['image_proxy_path']?.toString() ?? ''; // added: local API streaming fallback for image loading
+      if (imageProxyPath.isNotEmpty) { // added: build full URL from ApiConfig
+        vehicle['image_proxy_url'] = '${ApiConfig.baseUrl}/$imageProxyPath'; // added: store proxy URL into vehicle map
+      } // added: end proxy URL
+      final dOwnerProxyPath = vehicle['d_owner_image_proxy_path']?.toString() ?? ''; // changed: local API streaming fallback for d_owner image loading
+      if (dOwnerProxyPath.isNotEmpty) { // changed: build full URL from ApiConfig for d_owner
+        vehicle['d_owner_image_proxy_url'] = '${ApiConfig.baseUrl}/$dOwnerProxyPath'; // changed: store d_owner proxy URL into vehicle map
+      } // changed: end d_owner proxy URL
       final record = response['record'] as Map<String, dynamic>? ?? {};
       await Navigator.of(context).push(
         MaterialPageRoute(
-          builder: (context) => CustomerRecordDetailsPage(
-            customer: customer,
-            record: record,
-          ),
+          builder: (context) => CustomerRecordDetailsPage( // changed: page now shows owner + vehicles from passcard scan
+            owner: owner, // changed: pass owner map
+            vehicle: vehicle, // changed: pass vehicle map
+            passcard: passcard, // added: pass passcard map
+            record: record, // unchanged: scan metadata (type/date/time)
+            passcardStatus: passcardStatus, // added: show passcard status above owner status
+          ), // changed: end page constructor
         ),
       );
     } on OtpReverificationRequired catch (e) {
@@ -176,9 +226,15 @@ class _DashboardState extends State<Dashboard> {
       _goToLoginAfterOtpPolicy(e.message);
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Scan failed: $e')),
-      );
+      final raw = e.toString(); // added: get error string
+      final msg = raw.replaceFirst('Exception: ', '').trim(); // added: extract message from Exception formatting
+      if (msg == 'Sorry invalid passcard') { // added: show invalid passcard as centered modal
+        await _showCenteredErrorModal(msg); // added: modal for invalid passcard
+        return; // added: stop further snackbar handling for this case
+      } // added: end invalid passcard check
+      ScaffoldMessenger.of(context).showSnackBar( // changed: keep snackbar for other errors
+        SnackBar(content: Text('Scan failed: $msg')), // changed: show cleaned message
+      ); // changed: end snackbar
     } finally {
       if (!mounted) return;
       setState(() {

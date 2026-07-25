@@ -1,6 +1,8 @@
 import 'dart:convert';
+import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:afpflutter/services/authentication.dart';
 import 'package:afpflutter/screens/authentication/login.dart';
 import 'package:afpflutter/services/api_config.dart';
@@ -198,47 +200,74 @@ class _ProfileSettingsPageState extends State<ProfileSettingsPage> {
   }
 
   /// Opens the API QR page so the user can scan the TOTP secret (public GET).
-  Future<void> _openTotpSetupInBrowser() async {
+  Future<void> _activateAuth() async {
+    if (_isSaving || _isLoadingProfile) return;
     final email = _emailController.text.trim();
     if (email.isEmpty) return;
-    final uri = Uri.parse(
-      '${ApiConfig.baseUrl}/user/setup-totp/${Uri.encodeComponent(email)}',
-    );
-    if (await canLaunchUrl(uri)) {
-      await launchUrl(uri, mode: LaunchMode.externalApplication);
-    }
-  }
-
-  /// Profile switch: turn optional authenticator protection on or off.
-  Future<void> _onOtpToggled(bool value) async {
-    if (_isSaving || _isLoadingProfile) return;
-    final prev = _otpEnabled;
-    setState(() {
-      _otpEnabled = value;
-    });
+    setState(() => _isSaving = true);
     try {
       await _authService.updateProfile(
         firstName: _firstNameController.text.trim(),
         lastName: _lastNameController.text.trim(),
         phoneNumber: _phoneController.text.trim(),
         image: _profileImageRef,
-        otpEnabled: value,
+        otpEnabled: true,
       );
-      if (value && mounted) {
-        await _openTotpSetupInBrowser();
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Scan the QR code in the browser to finish setup.')),
-          );
-        }
-      }
+      if (!mounted) return;
+      setState(() {
+        _otpEnabled = true;
+        _isSaving = false;
+      });
+      await Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (_) => _AuthActivationPage(email: email, authService: _authService),
+        ),
+      );
+    } on OtpReverificationRequired catch (e) {
+      if (!mounted) return;
+      setState(() => _isSaving = false);
+      Navigator.of(context).pushAndRemoveUntil(
+        MaterialPageRoute(builder: (_) => LoginPage(sessionExpiredMessage: e.message)),
+        (route) => false,
+      );
     } catch (e) {
-      if (mounted) {
-        setState(() => _otpEnabled = prev);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Could not update 2FA: $e')),
-        );
-      }
+      if (!mounted) return;
+      setState(() => _isSaving = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Could not activate auth: $e')),
+      );
+    }
+  }
+
+  Future<void> _disableAuth() async {
+    if (_isSaving || _isLoadingProfile) return;
+    setState(() => _isSaving = true);
+    try {
+      await _authService.updateProfile(
+        firstName: _firstNameController.text.trim(),
+        lastName: _lastNameController.text.trim(),
+        phoneNumber: _phoneController.text.trim(),
+        image: _profileImageRef,
+        otpEnabled: false,
+      );
+      if (!mounted) return;
+      setState(() {
+        _otpEnabled = false;
+        _isSaving = false;
+      });
+    } on OtpReverificationRequired catch (e) {
+      if (!mounted) return;
+      setState(() => _isSaving = false);
+      Navigator.of(context).pushAndRemoveUntil(
+        MaterialPageRoute(builder: (_) => LoginPage(sessionExpiredMessage: e.message)),
+        (route) => false,
+      );
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _isSaving = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Could not disable auth: $e')),
+      );
     }
   }
 
@@ -353,16 +382,64 @@ class _ProfileSettingsPageState extends State<ProfileSettingsPage> {
               Container(
                 width: double.infinity,
                 decoration: BoxDecoration(
-                  color: Colors.white,
+                  color: _otpEnabled ? const Color(0xFFE8F5E9) : Colors.white,
                   borderRadius: BorderRadius.circular(14),
-                ),
-                child: SwitchListTile(
-                  title: const Text('Authenticator (OTP)'),
-                  subtitle: const Text(
-                    'When on, suspicious logins require a code from your authenticator app.',
+                  border: Border.all(
+                    color: _otpEnabled ? const Color(0xFF2E7D32) : Colors.transparent,
+                    width: 1,
                   ),
-                  value: _otpEnabled,
-                  onChanged: _onOtpToggled,
+                ),
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          const Text(
+                            'Authenticator',
+                            style: TextStyle(
+                              fontWeight: FontWeight.w700,
+                              color: Colors.black87,
+                            ),
+                          ),
+                          const Spacer(),
+                          Container(
+                            width: 10,
+                            height: 10,
+                            decoration: BoxDecoration(
+                              color: _otpEnabled ? const Color(0xFF2E7D32) : Colors.grey,
+                              shape: BoxShape.circle,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      const Text(
+                        'Use Google Authenticator for login verification.',
+                        style: TextStyle(
+                          color: Colors.black54,
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      if (!_otpEnabled)
+                        SizedBox(
+                          width: double.infinity,
+                          child: FilledButton(
+                            onPressed: _isSaving ? null : _activateAuth,
+                            child: const Text('Activate Auth'),
+                          ),
+                        )
+                      else
+                        SizedBox(
+                          width: double.infinity,
+                          child: OutlinedButton(
+                            onPressed: _isSaving ? null : _disableAuth,
+                            child: const Text('Disable'),
+                          ),
+                        ),
+                    ],
+                  ),
                 ),
               ),
               const SizedBox(height: 24),
@@ -546,6 +623,190 @@ class _ProfileField extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+class _AuthActivationPage extends StatefulWidget {
+  const _AuthActivationPage({required this.email, required this.authService});
+
+  final String email;
+  final AuthenticationService authService;
+
+  @override
+  State<_AuthActivationPage> createState() => _AuthActivationPageState();
+}
+
+class _AuthActivationPageState extends State<_AuthActivationPage> {
+  bool _loading = true;
+  String _error = '';
+  Uint8List? _qrBytes;
+  String _secret = '';
+  bool _showQr = true;
+  final TextEditingController _codeController = TextEditingController();
+
+  @override
+  void initState() {
+    super.initState();
+    _loadSetup();
+  }
+
+  @override
+  void dispose() {
+    _codeController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _loadSetup() async {
+    setState(() {
+      _loading = true;
+      _error = '';
+    });
+    try {
+      final data = await widget.authService.getTotpSetup(widget.email);
+      final secret = (data['secret'] ?? '').toString().trim();
+      final qr = (data['qr_code_base64'] ?? '').toString().trim();
+      Uint8List? bytes;
+      if (qr.isNotEmpty) {
+        final parts = qr.split(',');
+        final raw = parts.length > 1 ? parts.last : qr;
+        bytes = base64Decode(raw);
+      }
+      if (!mounted) return;
+      setState(() {
+        _secret = secret;
+        _qrBytes = bytes;
+        _codeController.text = secret;
+        _loading = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _error = e.toString();
+        _loading = false;
+      });
+    }
+  }
+
+  Future<void> _copySecret() async {
+    if (_secret.trim().isEmpty) return;
+    await Clipboard.setData(ClipboardData(text: _secret.trim()));
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Code copied')),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: const Color(0xFFF5F5F7),
+      appBar: AppBar(
+        backgroundColor: const Color(0xFFF5F5F7),
+        elevation: 0,
+        title: const Text('Activate Auth'),
+      ),
+      body: SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
+          child: Column(
+            children: [
+              Expanded(
+                child: SingleChildScrollView(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'Steps',
+                        style: TextStyle(
+                          fontWeight: FontWeight.w800,
+                          fontSize: 16,
+                          color: Colors.black87,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      const Text('1) Open Google Authenticator'),
+                      const Text('2) Tap + to add an account'),
+                      const Text('3) Scan the QR or enter the code'),
+                      const Text('4) Come back and tap "I\'ve already done this"'),
+                      const SizedBox(height: 16),
+                      Row(
+                        children: [
+                          ChoiceChip(
+                            label: const Text('QR'),
+                            selected: _showQr,
+                            onSelected: (_) => setState(() => _showQr = true),
+                          ),
+                          const SizedBox(width: 10),
+                          ChoiceChip(
+                            label: const Text('Code'),
+                            selected: !_showQr,
+                            onSelected: (_) => setState(() => _showQr = false),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 16),
+                      if (_loading)
+                        const Center(child: Padding(padding: EdgeInsets.all(16), child: CircularProgressIndicator()))
+                      else if (_error.isNotEmpty)
+                        Text(
+                          _error,
+                          style: const TextStyle(color: Colors.red),
+                        )
+                      else if (_showQr)
+                        Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.all(16),
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(14),
+                          ),
+                          child: _qrBytes == null
+                              ? const SizedBox(
+                                  height: 240,
+                                  child: Center(child: Text('QR not available')),
+                                )
+                              : Image.memory(
+                                  _qrBytes!,
+                                  width: 260,
+                                  height: 260,
+                                ),
+                        )
+                      else
+                        Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.all(16),
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(14),
+                          ),
+                          child: TextField(
+                            controller: _codeController,
+                            readOnly: true,
+                            decoration: InputDecoration(
+                              labelText: 'Code',
+                              suffixIcon: IconButton(
+                                icon: const Icon(Icons.copy),
+                                onPressed: _copySecret,
+                              ),
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+              ),
+              SizedBox(
+                width: double.infinity,
+                child: FilledButton(
+                  onPressed: () => Navigator.of(context).pop(),
+                  child: const Text("I've already done this"),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }

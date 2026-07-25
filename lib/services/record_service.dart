@@ -10,8 +10,8 @@ class RecordService {
   final AuthenticationService _authService;
 
   Future<Map<String, dynamic>> createRecordFromScan({
-    required String customerId,
-    required String type,
+    required String passcardId, // changed: scan ids now come from passcards collection
+    required String type, // unchanged: IN/OUT
   }) async {
     final token = await _authService.getToken();
     if (token == null || token.isEmpty) {
@@ -26,8 +26,8 @@ class RecordService {
         'Authorization': 'Bearer $token',
       },
       body: jsonEncode({
-        'customer_id': customerId,
-        'type': type,
+        'passcard_id': passcardId, // changed: backend expects passcard_id
+        'type': type, // unchanged: IN/OUT
       }),
     );
 

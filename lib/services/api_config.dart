@@ -4,6 +4,7 @@ class ApiConfig {
       true; // change this to true to use Render backend
 
   /// Local AFPApi - used when developing locally. Run API with: uvicorn main:app --reload (from AFPApi folder).
+  /// Use 10.0.2.2 for Android emulator, 127.0.0.1 for iOS simulator / web / physical device on same network.
   static const String _localBaseUrl = 'http://localhost:8000/api';
 
   /// Render (production) - used when you want to hit the deployed API.

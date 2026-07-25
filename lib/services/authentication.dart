@@ -266,4 +266,17 @@ class AuthenticationService {
     final errorMsg = data['detail'] ?? data['message'] ?? 'Request failed';
     throw Exception(errorMsg);
   }
+
+  Future<Map<String, dynamic>> getTotpSetup(String email) async {
+    final url = Uri.parse('$baseUrl/user/setup-totp/${Uri.encodeComponent(email.trim())}');
+    final headers = await _buildAuthHeaders();
+    final response = await http.get(url, headers: headers);
+    final data = jsonDecode(response.body) as Map<String, dynamic>;
+    await throwIfOtpReverifyResponse(response, data);
+    if (response.statusCode == 200) {
+      return data;
+    }
+    final errorMsg = data['detail'] ?? data['message'] ?? 'Failed to load authenticator setup';
+    throw Exception(errorMsg);
+  }
 }
