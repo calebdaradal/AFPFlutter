@@ -6,6 +6,7 @@ import 'package:afpflutter/screens/qr/qr_scanner_page.dart'; // QR scanner scree
 import 'package:afpflutter/screens/customer/customer_record_details_page.dart';
 import 'package:afpflutter/shared/profile_avatar_image.dart';
 import 'package:afpflutter/services/api_config.dart';
+import 'package:afpflutter/services/location_service.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 /// Landing screen design: header (profile + welcome + logout), SCAN QR, QR with L-brackets, IN/OUT buttons.
@@ -31,6 +32,7 @@ class Dashboard extends StatefulWidget {
 class _DashboardState extends State<Dashboard> {
   final AuthenticationService _authService = AuthenticationService(); // Handles profile lookup
   final RecordService _recordService = RecordService(); // Handles scan -> record creation
+  final LocationService _locationService = LocationService(); // Added: reads device coordinates before sending scan
   String _displayName = 'User'; // Default fallback name
   String _profileImageRef = ''; // API `image` field — empty uses default asset in [ProfileAvatarImage]
   bool _isProcessingScan = false; // Prevent duplicate scan submissions
@@ -186,9 +188,12 @@ class _DashboardState extends State<Dashboard> {
     });
     try {
       final passcardId = _normalizePasscardIdFromQr(scannedValue); // added: parse vpc:{id} QR payload into raw passcard id
+      final coordinates = await _locationService.getCurrentCoordinates(); // added: capture device coordinates before posting scan
       final response = await _recordService.createRecordFromScan(
         passcardId: passcardId, // changed: send normalized raw passcard id to backend
         type: actionLabel, // unchanged: IN or OUT
+        longitude: coordinates.longitude, // added: send current device longitude
+        latitude: coordinates.latitude, // added: send current device latitude
       );
       if (!mounted) return;
       final owner = response['owner'] as Map<String, dynamic>? ?? {}; // changed: owner details from new backend

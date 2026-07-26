@@ -12,6 +12,8 @@ class RecordService {
   Future<Map<String, dynamic>> createRecordFromScan({
     required String passcardId, // changed: scan ids now come from passcards collection
     required String type, // unchanged: IN/OUT
+    required double longitude, // added: scanner longitude for backend SNS payload
+    required double latitude, // added: scanner latitude for backend SNS payload
   }) async {
     final token = await _authService.getToken();
     if (token == null || token.isEmpty) {
@@ -28,6 +30,8 @@ class RecordService {
       body: jsonEncode({
         'passcard_id': passcardId, // changed: backend expects passcard_id
         'type': type, // unchanged: IN/OUT
+        'longitude': longitude, // added: send scanner longitude to backend
+        'latitude': latitude, // added: send scanner latitude to backend
       }),
     );
 

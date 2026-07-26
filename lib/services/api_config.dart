@@ -8,7 +8,7 @@ class ApiConfig {
   static const String _localBaseUrl = 'http://localhost:8000/api';
 
   /// Render (production) - used when you want to hit the deployed API.
-  static const String _renderBaseUrl = 'https://afpapi.onrender.com/api';
+  static const String _renderBaseUrl = 'https://vpc-scanner.onrender.com/api';
 
   /// Base URL that the rest of the app should use. It picks between local and Render based on [useRenderBackend].
   static String get baseUrl =>
